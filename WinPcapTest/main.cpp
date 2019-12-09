@@ -1,41 +1,41 @@
-//从一个选定的接口捕获数据包，并且将它们保存到用户指定的文件中。
-
 #define HAVE_REMOTE
 #pragma warning(disable : 4996) //_CRT_SECURE_NO_WARNINGS
 #include "pcap.h"
 #include "package.h"
 
-// 回调函数原型 
-void save_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data);
-void read_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data);
-int savePackage();	//保存包到离线文件
-int readPackage();	//从离线文件读取包
+#define DEFAULT_DEV_INDX 4	//default devices index
 
-
+package pcaptool;
 pcap_if_t *alldevs;
 pcap_if_t *d;
 pcap_dumper_t *dumpfile;
 pcap_t *adhandle;
 char errbuf[PCAP_ERRBUF_SIZE];
-const char* offlinePath = "D:\\TEMP\\package.pkg";
-int count = 0, capNum =30;
+//const char* offlinePath = "D:\\WorkPlace\\C++WorkPlace\\WinPcapTest\\offlinePackage\\package.pkg";
+const char* offlinePath = "D:\\WorkPlace\\C++WorkPlace\\WinPcapTest\\offlinePackage\\Arpx3.pcapng";
+int packCount = 0;
+int capNum = 10000;		//dealine of packCount
 
-//=============== TEST =====================
-package pcaptool;
 
-//==========================================
+void save_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data);
+void read_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data);
+int savePackage();	//save package to offline file
+int readPackage();	//read package from offline file
+int catchPackage();		//capture package and handle it 
+
+
 
 int main(int argc, char **argv){
 	int inum;
 	int i = 0;
-	// 获取本机设备列表 
+	// get devices list
 	if (pcap_findalldevs_ex(PCAP_SRC_IF_STRING, NULL, &alldevs, errbuf) == -1){
 		fprintf(stderr, "Error in pcap_findalldevs: %s\n", errbuf);
 		exit(1);
 	}
-	// 跳转到选中的适配器 
-	for (d = alldevs, i = 0; i< 3; d = d->next, i++);
-	// 打开适配器 
+	// find the specified adapter
+	for (d = alldevs, i = 0; i< DEFAULT_DEV_INDX -1 ; d = d->next, i++);
+	// open the selected adapter 
 	if ((adhandle = pcap_open(d->name, 65536, PCAP_OPENFLAG_PROMISCUOUS, 1000, NULL, errbuf )) == NULL){
 		fprintf(stderr, "\nUnable to open the adapter. %s is not supported by WinPcap\n", d->name);
 		pcap_freealldevs(alldevs);
@@ -44,27 +44,46 @@ int main(int argc, char **argv){
 	
 	//==================== main function ===============
 
-	//savePackage();		//捕抓capNum个数据包并保存到 offlinePath
-	readPackage();			//从 offlinePath 读取全部数据包并处理
+	catchPackage();
+	//savePackage();		
+	//readPackage();			
 
 	//==================================================
 
-	// 释放设备列表 
 	pcap_freealldevs(alldevs);
 	return 0;
 }
 
-//从离线文件读取数据包并处理
+
+//capture pcakge by calling pcap_next_ex();
+int catchPackage(){
+	int res;
+	const u_char *pkt_data;
+	struct pcap_pkthdr *header;
+	while ((res = pcap_next_ex(adhandle, &header, &pkt_data)) >= 0){
+		if (res == 0)	continue;		//time out
+		if (packCount++ > capNum) break;	//limit the package numbers;
+		printf("No: %d\n", packCount);
+		pcaptool.PrintPackage(pkt_data);
+	}
+	if (res == -1){
+		printf("Error reading the packets: %s\n", pcap_geterr(adhandle));
+		return -1;
+	}
+	return 0;
+}
+
+//read package from offline file
 int readPackage(){
 	pcap_t *fp;
 	char source[PCAP_BUF_SIZE];
 
-	// 根据新WinPcap语法创建一个源字符串
+	// create a source string
 	if (pcap_createsrcstr(source, PCAP_SRC_FILE, NULL, NULL, offlinePath, errbuf) != 0){
 		fprintf(stderr, "\nError creating a source string\n");
 		return -1;
 	}
-	// 打开捕获文件 
+	// open and read offline package file
 	if ((fp = pcap_open(source,  65536, PCAP_OPENFLAG_PROMISCUOUS, 1000, NULL, errbuf )) == NULL){
 		fprintf(stderr, "\nUnable to open the file %s.\n", errbuf);
 		return -1;
@@ -73,7 +92,7 @@ int readPackage(){
 	return 0;
 }
 
-//保存包到离线文件
+//save pacakge to offlie file
 int savePackage(){
 	dumpfile = pcap_dump_open(adhandle, offlinePath);
 	if (dumpfile == NULL){
@@ -84,18 +103,18 @@ int savePackage(){
 	return 0;
 }
 
-// 回调函数-保存数据包
+//called by pcap_loop in savePackage
 void save_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_char *pkt_data){
-	count++;
-	if (count >= 30){
+	packCount++;
+	if (packCount >= capNum){
 		exit(0);
 	}
 	printf(".");
-	// 保存数据包到堆文件
+	// save to heap file
 	pcap_dump(dumpfile, header, pkt_data);
 }
 
-//回调函数，打印数据包信息
+//printf he message of header, called by pcap_loop in readPackage
 void read_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_char *pkt_data){
 	pcaptool.PrintPackage(pkt_data);
 }

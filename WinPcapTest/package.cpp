@@ -1,58 +1,66 @@
 #pragma once
 #define HAVE_REMOTE
 #pragma warning(disable : 4996)
-
-#include "pcap.h"
-#include "package.h"
 #ifdef inline
 #undef inline 
 #endif
 
+#include "pcap.h"
+#include "package.h"
 using namespace std;
 
+package::package(){}
 
+package::~package(){}
 
-
-package::package(){
-}
-
-
-package::~package(){
-}
-
+//PrintPackage is the mainly funciton to handle the package
 void package::PrintPackage(const u_char *pkt_data){
 	this->ethe = (Ethernet_pak*)pkt_data;
 	printfEthe();
 	
-	if (!isIPV4()) return;
-	this->ip = (IP_Pak*)(pkt_data + 14);
-	printfIP();
+	string protocolI = getTypeNameI();
 
-	if (isTCP()){
-		tcp = (TCP_Pak*)(pkt_data + 14 + (ip->vers_len & 0x0f) * 4);
-		printfTCP();
-	}
-	else if(isUDP()){
-		udp = (UDP_Pak*)(pkt_data + 14 + (ip->vers_len & 0x0f) * 4);
-		printfUDP();
-	}
+	if (protocolI == "IPv4"){
 
+		this->ip = (IP_Pak*)(pkt_data + 14);
+		printfIP();
+
+		string protocolAII = getTypeNameII();
+		if (protocolAII == "TCP"){
+			tcp = (TCP_Pak*)(pkt_data + 14 + (ip->vers_len & 0x0f) * 4);
+			printfTCP();
+		}
+		else if (protocolAII == "UDP"){
+			udp = (UDP_Pak*)(pkt_data + 14 + (ip->vers_len & 0x0f) * 4);
+			printfUDP();
+		}
+	}
+	else if (protocolI == "ARP"){
+		this->arp = (ARP_Pak*)(pkt_data + 14);
+		printfARP();
+		exit(0);
+	}
 	printf("\n\n");
+
 	return;
 }
+
+
+//======================== private tools function ==================
 
 //print the message of a ethenet package head
 void package::printfEthe(){
 	printf("=============== Ethernet II =======================\n");
 	printf("Source Mac address: %.2x-%.2x-%.2x-%.2x-%.2x-%.2x\n", 
-		ethe->Destination[0], ethe->Destination[1], ethe->Destination[2], 
-		ethe->Destination[3],ethe->Destination[4], ethe->Destination[5]);
+		ethe->destination[0], ethe->destination[1], ethe->destination[2],
+		ethe->destination[3], ethe->destination[4], ethe->destination[5]);
 
 	printf("Destin Mac address: %.2x-%.2x-%.2x-%.2x-%.2x-%.2x\n", 
-		ethe->Source[0], ethe->Source[1], ethe->Source[2], 
-		ethe->Source[3], ethe->Source[4], ethe->Source[5] );
+		ethe->source[0], ethe->source[1], ethe->source[2],
+		ethe->source[3], ethe->source[4], ethe->source[5]);
 	
-	printf("Type: 0x%.2x%.2x %s\n", ethe->Type[0], ethe->Type[1], (isIPV4() ? "IPV4": "Other"));
+	u_short tmpVal = ntohs(ethe->etype);
+	printf("Type: 0x%.2x%.2x  %s\n", (tmpVal >> 8) & 0x0f, tmpVal & 0x0f, getTypeNameI().c_str());
 	return;
 }
 
@@ -101,8 +109,58 @@ void package::printfUDP(){
 	printf("UDP checkSum:   %d \n", ntohs(udp->checkSum));
 }
 
+void package::printfARP(){
+	printf("======== ARP ========\n");
+	u_short tmpVal = ntohs(arp->hardwareType);
+	printf("HardWare type:   %u   %s\n", tmpVal, tmpVal == 1 ? "Ethernet" : "other");
+
+	tmpVal = ntohs(arp->protocolType);
+	printf("Protocol type:   0x%.2x%.2x\n", tmpVal >> 8, tmpVal & 0x0f);
+
+	printf("HardWare size:   %d\n", arp->hardwareSize);
+	printf("Protocol size:   %d\n", arp->protocolSize);
+
+	tmpVal = ntohs(arp->opcode);
+	printf("Protocol type:  %d    %s\n", tmpVal,
+		(tmpVal==1?"ARP-request":(tmpVal==2?"ARP-response":(tmpVal==3?"RARP-request":"RARP-response"))));
+
+	printf("Sender Mac address: %.2x-%.2x-%.2x-%.2x-%.2x-%.2x\n",
+		arp->senderMAC[0], arp->senderMAC[1], arp->senderMAC[2],
+		arp->senderMAC[3], arp->senderMAC[4], arp->senderMAC[5]);
+
+	printf("Sender IP:   %d.%d.%d.%d\n", arp->senderIP[0], arp->senderIP[1], arp->senderIP[2], arp->senderIP[3]);
+
+	printf("Target Mac address: %.2x-%.2x-%.2x-%.2x-%.2x-%.2x\n",
+		arp->targetMAC[0], arp->targetMAC[1], arp->targetMAC[2],
+		arp->targetMAC[3], arp->targetMAC[4], arp->targetMAC[5]);
+
+	printf("Target IP:   %d.%d.%d.%d\n", arp->targetIP[0], arp->targetIP[1], arp->targetIP[2], arp->targetIP[3]);
+	return;
+}
+
+//======================== small tools function =====================
+
+//get the protocol type name of level one
+string package::getTypeNameI(){
+	u_short val = ntohs(ethe->etype);
+	if (val == 0x0800) return "IPv4";
+	if (val == 0x0806) return "ARP";
+	if (val == 0x86DD) return "IPv6";
+	return "unknow";
+}
+
+//get the protocol type name of level one
+string package::getTypeNameII(){
+	u_int val = (int)ip->protocol;
+	if (val == 17) return "UDP";
+	if (val == 6) return "TCP";
+	if (val == 1) return "ICMP";
+	return "unknow";
+}
+
 bool package::isIPV4(){
-	if ((int)ethe->Type[0] == 0x08 && (int)ethe->Type[1] == 0x00){
+	u_short val = ntohs(ethe->etype);
+	if (val == 0x0800){
 		return true;
 	}
 	return false;
@@ -118,8 +176,18 @@ bool package::isTCP(){
 	return false;
 }
 
+bool package::isARP(){
+	u_short val = ntohs(ethe->etype);
+	if (val == 0x0806){
+		return true;
+	}
+	return false;
+}
+
+//=========================== friend functions ======================
+
 //get the decimal value of a binary string
-int package::binToInt(u_char* bs, int len){
+int binToInt(u_char* bs, int len){
 	int result = 0;
 	int magnify = ((len - 1) * 8);
 	for (int i = 0; i<len; i++){

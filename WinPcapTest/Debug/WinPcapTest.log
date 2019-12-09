@@ -1,4 +1,4 @@
-﻿Build started 12/8/2019 9:11:34 AM.
+﻿Build started 12/8/2019 12:17:25 PM.
      1>Project "D:\WorkPlace\C++WorkPlace\WinPcapTest\WinPcapTest\WinPcapTest.vcxproj" on node 2 (Build target(s)).
      1>ClCompile:
          D:\软件\vs2013\VC\bin\CL.exe /c /ZI /nologo /W1 /WX- /sdl /Od /Oy- /D WIN32 /D _DEBUG /D _CONSOLE /D _LIB /D _UNICODE /D UNICODE /Gm /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Fo"Debug\\" /Fd"Debug\vc120.pdb" /Gd /TP /analyze- /errorReport:prompt package.cpp
@@ -11,4 +11,4 @@
 
 Build succeeded.
 
-Time Elapsed 00:00:01.39
+Time Elapsed 00:00:01.25

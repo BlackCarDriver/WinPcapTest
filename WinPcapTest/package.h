@@ -1,13 +1,22 @@
 #pragma once
 
+#ifdef inline
+#undef inline 
+#endif
+
+#include<string.h>
+#include<string>
+#include<iostream>
+using namespace std;
+
 typedef unsigned char u_char;
 typedef unsigned int u_int;
 typedef unsigned short u_short;
 
 struct Ethernet_pak{
-	u_char Destination[6];
-	u_char Source[6];
-	u_char Type[2];
+	u_char destination[6];
+	u_char source[6];
+	u_short etype;
 };
 
 struct IP_Pak {
@@ -41,11 +50,24 @@ struct UDP_Pak{
 	u_short checkSum;
 };
 
+struct ARP_Pak{
+	u_short hardwareType;
+	u_short protocolType;
+	u_char hardwareSize;
+	u_char protocolSize;
+	u_short opcode;
+	u_char senderMAC[6];
+	u_char senderIP[4];
+	u_char targetMAC[6];
+	u_char targetIP[4];
+};
+
 class package{
 	Ethernet_pak *ethe;
 	IP_Pak *ip;
 	TCP_Pak *tcp;
 	UDP_Pak *udp;
+	ARP_Pak *arp;
 
 public:
 	void PrintPackage(const u_char *pkt_data);
@@ -55,13 +77,18 @@ private:
 	void printfIP();
 	void printfTCP();
 	void printfUDP();
+	void printfARP();
 	bool isIPV4();
 	bool isUDP();
 	bool isTCP();
-	int binToInt(u_char*, int);
+	bool isARP();
+	
+	string getTypeNameI();
+	string getTypeNameII();
 
 	template <typename Ty>
 	friend void printBin(Ty*);
+	friend int binToInt(u_char*, int);
 
 public:
 	package();
