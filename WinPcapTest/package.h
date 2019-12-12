@@ -7,11 +7,13 @@
 #include<string.h>
 #include<string>
 #include<iostream>
+#include<vector>
 using namespace std;
 
 typedef unsigned char u_char;
 typedef unsigned int u_int;
 typedef unsigned short u_short;
+typedef vector<string> strVec;
 
 struct Ethernet_pak{
 	u_char destination[6];
@@ -71,7 +73,8 @@ class package{
 
 public:
 	void PrintPackage(const u_char *pkt_data);
-	
+	void CreatePackage(u_char*, string);
+
 private:
 	void printfEthe();
 	void printfIP();

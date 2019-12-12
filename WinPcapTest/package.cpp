@@ -38,7 +38,6 @@ void package::PrintPackage(const u_char *pkt_data){
 	else if (protocolI == "ARP"){
 		this->arp = (ARP_Pak*)(pkt_data + 14);
 		printfARP();
-		exit(0);
 	}
 	printf("\n\n");
 
@@ -213,3 +212,9 @@ void printBin(Ty *p){
 	printf("\n");
 }
 
+
+//========================== testting functions ====================
+void package::CreatePackage(u_char *p, string data){
+	
+	return;
+}
