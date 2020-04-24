@@ -1,11 +1,16 @@
-
+#pragma once
 #define HAVE_REMOTE
 #pragma warning(disable : 4996) //_CRT_SECURE_NO_WARNINGS
-#include "pcap.h"
 #include "package.h"
 #include "mockPackage.h"
+#include <pcap.h>
+#include <remote-ext.h>
+#include <Win32-Extensions.h>
+#include <algorithm>
 
-#define DEFAULT_DEV_INDX 4	//default devices index
+#define DEFAULT_DEV_INDX 1	//default devices index
+#define DEFAULT_FILTER ""	//package filter rule
+const bool conf_useFilter = false;	//是否使用过滤器
 
 package pcaptool;
 pcap_if_t *alldevs;
@@ -14,9 +19,8 @@ pcap_dumper_t *dumpfile;
 pcap_t *adhandle;				//adapter handler
 char errbuf[PCAP_ERRBUF_SIZE];
 
-int packCount = 0;
+int packCount = 0;			//the number of packages already catch
 int capNum = 1000000;		//dealine of packCount
-//const char* offlinePath = "D:\\WorkPlace\\C++WorkPlace\\WinPcapTest\\offlinePackage\\package.pkg";
 const char* offlinePath = "D:\\WorkPlace\\C++WorkPlace\\WinPcapTest\\offlinePackage\\Arpx3.pcapng";
 
 void save_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data);
@@ -27,7 +31,8 @@ int savePackage();	//save package to offline file
 int readPackage();	//read package from offline file
 int catchPackage();		//capture package and handle it 
 int captureAndStatic();
-int sendPack();
+int sendPacket();
+int setFilter(pcap_t * handler, string str);
 
 int main(int argc, char **argv){
 	int inum;
@@ -47,19 +52,35 @@ int main(int argc, char **argv){
 	for (d = alldevs, i = 0; i< DEFAULT_DEV_INDX - 1; d = d->next, i++);
 	// open the selected adapter 
 	if ((adhandle = pcap_open(d->name, 65536, PCAP_OPENFLAG_PROMISCUOUS, 1000, NULL, errbuf)) == NULL){
-		fprintf(stderr, "\nUnable to open the adapter. %s is not supported by WinPcap\n", d->name);
+		fprintf(stderr, "Unable to open the adapter. %s is not supported by WinPcap\n", d->name);
 		pcap_freealldevs(alldevs);
 		return -1;
 	}
+	//check if works on Ethernet
+	if (pcap_datalink(adhandle) != DLT_EN10MB){
+		fprintf(stderr, "This program works only on Ethernet networks.\n");
+		pcap_freealldevs(alldevs);
+		return 1;
+	}
+
+	//set filter if viable
+	if (conf_useFilter && setFilter(adhandle, DEFAULT_FILTER) != 0){
+		printf("Set filter fail\n");
+		return 1;
+	}
+
+	puts("I am ready! \n");
 
 	//==================== main function ===============
 
 	int res;
-	res = sendPack();
+	res = sendPacket();
 	//res = captureAndStatic();
 	//res = catchPackage();
 	//res = savePackage();		
-	//res = readPackage();			
+	//res = readPackage();	
+
+
 	printf("Return result : %d\n", res);
 
 	//==================================================
@@ -68,27 +89,29 @@ int main(int argc, char **argv){
 	return 0;
 }
 
-int sendPack(){
-	u_char pack[65536];
-	int sendTimes = 100000;
 
-	//select a package and 
-	strVec tmpVec;
-	splitToVec(ATCK_ARP2, tmpVec, " ");
-	int size = tmpVec.size();
-	//press the package into a char array
-	for (int i = 0; i < tmpVec.size(); i++){
-		sscanf(tmpVec[i].c_str(), "%x", &pack[i]);
+//compile a packet filter and associate the filter to a capture. 
+int setFilter(pcap_t * handler, string rule){
+	struct bpf_program fcode;
+	u_int netmask = 0xffffff;				//default netmask of local network
+
+	//initialize the netmask
+	if (d->addresses != NULL){
+		netmask = ((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.S_un.S_addr;
 	}
-	//send package
-	for (int i = 1; i <= sendTimes; i++){
-		if (pcap_sendpacket(adhandle, pack, size) != 0){
-			fprintf(stderr, "\nError sending the packet: \n", pcap_geterr(adhandle));
-			return -1;
-		}
-		if (i % 10 == 0) Sleep(300);
-		printf("No.%d SendPackage success!\n", i);
+	//compile the filter
+	if (pcap_compile(adhandle, &fcode, rule.c_str(), 1, netmask) <0){
+		fprintf(stderr, "Unable to compile the packet filter. Check the syntax.\n");
+		pcap_freealldevs(alldevs);
+		return -1;
 	}
+	//make filter work
+	if (pcap_setfilter(adhandle, &fcode)<0){
+		fprintf(stderr, "Error setting the filter.\n");
+		pcap_freealldevs(alldevs);
+		return -1;
+	}
+	printf("Set filter success! regulation is: %s \n", rule.c_str());
 	return 0;
 }
 
@@ -129,7 +152,7 @@ int catchPackage(){
 	struct pcap_pkthdr *header;
 	packCount = 0;
 	while ((res = pcap_next_ex(adhandle, &header, &pkt_data)) >= 0){
-		if (res == 0)	continue;		//time out
+		if (res == 0)	continue;			//time out
 		if (packCount++ > capNum) break;	//limit the package numbers;
 		printf("No: %d\n", packCount);
 		pcaptool.PrintPackage(pkt_data);
@@ -217,19 +240,28 @@ void dispatcher_handler(u_char *state, const struct pcap_pkthdr *header, const u
 	return;
 }
 
+//发送单个数据包示例
+int sendPacket()	{
+	vector<u_char> sendData;
+	int sendTimes = 1;	
+	//准备需要发送到数据
+	if (GetUcharsArray(sharkHand, sendData) != 0){
+		printf("Can't get u_char array, send data fail!\n");
+		return -1;
+	}
+	//发送一定次数的相同数据包
+	for (int i = 1; i <= sendTimes; i++){
+		if (pcap_sendpacket(adhandle, sendData.data(), sendData.size()) != 0){
+			fprintf(stderr, "Error sending the packet: \n", pcap_geterr(adhandle));
+			return -1;
+		}
+		printf("send times: %d \n", i);
+	}
+	printf("Send data success\n");
+	return 0;
+}
+
 
 //===================== tools functions =====================\
 
-//split a string by delim to a vector
-void splitToVec(string &s, strVec &sv, char* delim) {
-	sv.clear();
-	char* buffer = new char[s.size() + 1];
-	buffer[s.size()] = '\0';
-	copy(s.begin(), s.end(), buffer);
-	char* p = strtok(buffer, delim);
-	do {
-		sv.push_back(p);
-	} while ((p = strtok(NULL, delim)));
-	delete[] buffer;
-	return;
-}
+

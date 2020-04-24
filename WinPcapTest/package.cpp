@@ -7,6 +7,7 @@
 
 #include "pcap.h"
 #include "package.h"
+#include <algorithm>
 using namespace std;
 
 package::package(){}
@@ -213,8 +214,25 @@ void printBin(Ty *p){
 }
 
 
-//========================== testting functions ====================
-void package::CreatePackage(u_char *p, string data){
-	
-	return;
+//========================== tool functions ====================
+//将字符串表示的16进制流解析到一个发送数组里面
+//格式实例：9cda3e10c0b114115dad23520800450001c115f2400
+int GetUcharsArray(string hexStream, vector<u_char> &result){
+	result.clear();
+	int i = 0;
+	for (i = 0; i + 1 < hexStream.size(); i += 2){
+		transform(hexStream.begin(), hexStream.end(), hexStream.begin(), ::tolower);
+		int tmp = hexStream[i + 1] - (isdigit(hexStream[i + 1]) ? '0' : 'a' - 10);
+		tmp += (hexStream[i] - (isdigit(hexStream[i]) ? '0' : 'a' - 10)) << 4;
+		if (tmp<0 || tmp>UCHAR_MAX){
+			printf("Unexpect thing happened! tmp=%d\n", tmp);
+			return -1;
+		}
+		result.push_back(u_char(tmp));
+	}
+	if (i != hexStream.size()){
+		printf("hexStream not legle, remain two 4 bit not used\n");
+		return -1;
+	}
+	return 0;
 }

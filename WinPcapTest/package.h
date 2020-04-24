@@ -15,6 +15,11 @@ typedef unsigned int u_int;
 typedef unsigned short u_short;
 typedef vector<string> strVec;
 
+
+//=============== tool function defination =================
+int GetUcharsArray(string hexStream, vector<u_char> &result);
+
+
 struct Ethernet_pak{
 	u_char destination[6];
 	u_char source[6];
@@ -73,7 +78,6 @@ class package{
 
 public:
 	void PrintPackage(const u_char *pkt_data);
-	void CreatePackage(u_char*, string);
 
 private:
 	void printfEthe();
@@ -96,4 +100,32 @@ private:
 public:
 	package();
 	~package();
+};
+
+
+
+//保存一个完整的TCP数据包
+struct Packet_TCP {
+	Ethernet_pak header_ether;
+	IP_Pak header_ip;
+	u_char* option_ip;	//ip变长部分数据
+	TCP_Pak header_tcp;
+	u_char * option_tcp;	//tcp变长部分数据
+	u_char * data_tcp;	//tcp数据部分
+public:
+	Packet_TCP(string hexStream){
+		vector<u_char> result;
+		if (GetUcharsArray(hexStream, result)!=0){
+			printf("Error happen, can't not getArray from hexStream");
+			return;
+		}
+		//构造以太帧头部
+		if (result.size() < 14){
+			printf("data not enough to fill a ethe Packet!\n");
+			return;
+		}
+		memcpy(&header_ether, result.data(), 20);
+		//构造TCP头部
+		//TODO。。。。。
+	}
 };
