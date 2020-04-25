@@ -12,6 +12,9 @@
 #include <exception>
 using namespace std;
 
+/*备忘录
+	1.用直接内存复制得到的数据类型，在当作整数使用前需要用ntohs()转换;
+*/
 
 //从字节数组中解析出一个完整的数据包对象
 ComplatePacket* getCompletePacket(const u_char *data){
@@ -20,14 +23,15 @@ ComplatePacket* getCompletePacket(const u_char *data){
 	try{
 		unique_ptr<Ethernet_pak> Ethe(new Ethernet_pak);
 		start += Ethe.get()->initialize(data);
-		if (Ethernet_pak::getTypeName(*Ethe) == "IPV4"){	//Ethe->ipv4
+		string method2 = Ethernet_pak::getTypeName(*Ethe);
+		if (method2 == "IPV4"){	//Ethe->ipv4
 			unique_ptr<IP_Pak> ipp(new IP_Pak);
 			auto LenTuple = ipp.get()->initialize(data + start);
 			start += get<0>(LenTuple);
 			int IPtotalLen = get<1>(LenTuple);
-			string method = IP_Pak::getTypeName(*ipp);
+			string method3 = IP_Pak::getTypeName(*ipp);
 
-			if (method == "TCP"){	//Ethe->ipv4->TCP
+			if (method3 == "TCP"){	//Ethe->ipv4->TCP
 				unique_ptr<TCP_Pak> tcp(new TCP_Pak);
 				//读取TCP首部
 				int tcpHeadLen = tcp.get()->initialize(data + start);
@@ -49,7 +53,7 @@ ComplatePacket* getCompletePacket(const u_char *data){
 				cpTcp->payLoad = move(tcpData);
 				return cpTcp;
 			}
-			if (method == "UDP"){	//Ethe->ipv4->udp
+			if (method3 == "UDP"){	//Ethe->ipv4->udp
 				//读取UDP首部
 				unique_ptr<UDP_Pak> udp(new UDP_Pak);
 				int udpHeadLen = udp.get()->initialize(data + start);
@@ -76,6 +80,16 @@ ComplatePacket* getCompletePacket(const u_char *data){
 				return cpUdp;
 			}
 			return nullptr;
+		}
+		else if (method2 == "ARP"){	//Ethe->ARP
+			unique_ptr<ARP_Pak>arp(new ARP_Pak);
+			start += arp.get()->initialize(data + start);
+			CP_ARP *cpArp = new CP_ARP;
+			memcpy(&Ethe.get()->crc, data + start, 4);
+			cpArp->ether_head = move(Ethe);
+			cpArp->arp_head = move(arp);
+			cpArp->isValid = true;
+			return cpArp;
 		}
 	}
 	catch (exception err){
@@ -290,10 +304,24 @@ UDP_Pak::~UDP_Pak(){}
 
 //================== ARP ===================
 
+int ARP_Pak::initialize(const u_char* data){
+	if (data == nullptr){
+		throw exception(ERR_ARGU);
+	}
+	const int headLen = 18;
+	memcpy(this, data, headLen);
+	u_short protocolCode = ntohs(protocolType);
+	u_short hardWareCode = ntohs(hardwareType);
+	if (protocolCode != 0x0800 || hardWareCode != 1){ //地址类型不是IP地址或接口类型不是以太网
+		throw exception(ERR_UNSUPPOSE);
+	}
+	return headLen;
+}
+
 void ARP_Pak::printPacket(const ARP_Pak &arp){
 	printf("======== ARP ========\n");
 	u_short tmpVal = ntohs(arp.hardwareType);
-	printf("HardWare type:   %u   %s\n", tmpVal, tmpVal == 1 ? "Ethernet" : "other");
+	printf("HardWare type:   %u   ( %s )\n", tmpVal, tmpVal == 1 ? "Ethernet" : "other");
 
 	tmpVal = ntohs(arp.protocolType);
 	printf("Protocol type:   0x%.2x%.2x\n", tmpVal >> 8, tmpVal & 0x0f);
@@ -302,7 +330,7 @@ void ARP_Pak::printPacket(const ARP_Pak &arp){
 	printf("Protocol size:   %d\n", arp.protocolSize);
 
 	tmpVal = ntohs(arp.opcode);
-	printf("Protocol type:  %d    %s\n", tmpVal,
+	printf("Protocol type:   %d   ( %s )\n", tmpVal,
 		(tmpVal == 1 ? "ARP-request" : (tmpVal == 2 ? "ARP-response" : (tmpVal == 3 ? "RARP-request" : "RARP-response"))));
 
 	printf("Sender Mac address: %.2x-%.2x-%.2x-%.2x-%.2x-%.2x\n",
@@ -318,6 +346,10 @@ void ARP_Pak::printPacket(const ARP_Pak &arp){
 	printf("Target IP:   %d.%d.%d.%d\n", arp.targetIP[0], arp.targetIP[1], arp.targetIP[2], arp.targetIP[3]);
 	return;
 }
+
+ARP_Pak::ARP_Pak(){}
+
+ARP_Pak::~ARP_Pak(){}
 
 //================== Ethe + IP + TCP ===================
 
@@ -372,6 +404,21 @@ CP_UDP::~CP_UDP(){
 	}
 }
 
+//================== Ethe + ARP ===================
+
+void CP_ARP::printPacket(){
+	if (!isValid){
+		printf("Packet invalid...\n");
+		return;
+	}
+	Ethernet_pak::printPacket(*ether_head.get());
+	ARP_Pak::printPacket(*arp_head);
+	return;
+}
+
+CP_ARP::CP_ARP(){}
+
+CP_ARP::~CP_ARP(){}
 
 //========================== globle tools functions ====================
 

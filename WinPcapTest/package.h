@@ -117,8 +117,11 @@ struct ARP_Pak{
 	u_char targetMAC[6];
 	u_char targetIP[4];
 
-	//打印数据报信息
+	int initialize(const u_char* data);
 	static void printPacket(const ARP_Pak &);
+
+	ARP_Pak();
+	~ARP_Pak();
 };
 
 
@@ -155,13 +158,27 @@ public:
 	unique_ptr<UDP_Pak> udp_head;
 	unique_ptr<u_char> payLoad;
 
-	void printPacket();
 	CP_UDP(const CP_UDP&) = delete;
 	CP_UDP& operator = (const CP_UDP&) = delete;
+
+	void printPacket();
 	CP_UDP();
 	~CP_UDP();
 };
 
+//一个完整的ARP数据包
+class CP_ARP :public ComplatePacket {
+public:
+	unique_ptr<Ethernet_pak> ether_head;
+	unique_ptr<ARP_Pak> arp_head;
+
+	CP_ARP(const CP_ARP&) = delete;
+	CP_ARP& operator = (const CP_ARP&) = delete;
+
+	void printPacket();
+	CP_ARP();
+	~CP_ARP();
+};
 
 //生成一个完整的数据包对象
 ComplatePacket* getCompletePacket(const u_char *data);

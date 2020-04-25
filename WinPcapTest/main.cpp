@@ -35,7 +35,7 @@ int setFilter(pcap_t * handler, string str);
 
 int test(){
 	vector<u_char>hexStream;
-	globalFunc::GetUcharsArray(HTTPPAK, hexStream);
+	globalFunc::GetUcharsArray(SYNPAK, hexStream);
 	auto result = getCompletePacket(hexStream.data());
 	if (result != nullptr){
 		result->printPacket();
@@ -86,9 +86,9 @@ int main(int argc, char **argv){
 	//==================== main function ===============
 
 	int res;
-	//res = sendPacket();
+	res = sendPacket();
 	//res = captureAndStatic();
-	res = catchPackage();
+	//res = catchPackage();
 	//res = savePackage();		
 	//res = readPackage();	
 
@@ -271,7 +271,7 @@ int sendPacket()	{
 	vector<u_char> sendData;
 	int sendTimes = 1;	
 	//准备需要发送到数据
-	if (globalFunc::GetUcharsArray(sharkHand, sendData) != 0){
+	if (globalFunc::GetUcharsArray(SYNPAK, sendData) != 0){
 		printf("Can't get u_char array, send data fail!\n");
 		return -1;
 	}
