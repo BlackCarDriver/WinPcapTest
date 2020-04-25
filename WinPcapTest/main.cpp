@@ -11,8 +11,8 @@
 #define DEFAULT_DEV_INDX 1	//default devices index
 #define DEFAULT_FILTER ""	//package filter rule
 const bool conf_useFilter = false;	//是否使用过滤器
+const int conf_capNum = 10;			//抓包个数
 
-package pcaptool;
 pcap_if_t *alldevs;
 pcap_if_t *d;
 pcap_dumper_t *dumpfile;
@@ -20,7 +20,6 @@ pcap_t *adhandle;				//adapter handler
 char errbuf[PCAP_ERRBUF_SIZE];
 
 int packCount = 0;			//the number of packages already catch
-int capNum = 1000000;		//dealine of packCount
 const char* offlinePath = "D:\\WorkPlace\\C++WorkPlace\\WinPcapTest\\offlinePackage\\Arpx3.pcapng";
 
 void save_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data);
@@ -35,16 +34,18 @@ int sendPacket();
 int setFilter(pcap_t * handler, string str);
 
 int test(){
-	string tmp = sharkHand;
-	vector<u_char>hexStream(tmp.begin(), tmp.end());
+	vector<u_char>hexStream;
+	globalFunc::GetUcharsArray(HTTPPAK, hexStream);
 	auto result = getCompletePacket(hexStream.data());
-
+	if (result != nullptr){
+		result->printPacket();
+	}
 	return 0;
 }
 
 int main(int argc, char **argv){
-	return test();
 
+	//return test();
 
 	int inum;
 	int i = 0;
@@ -85,9 +86,9 @@ int main(int argc, char **argv){
 	//==================== main function ===============
 
 	int res;
-	res = sendPacket();
+	//res = sendPacket();
 	//res = captureAndStatic();
-	//res = catchPackage();
+	res = catchPackage();
 	//res = savePackage();		
 	//res = readPackage();	
 
@@ -162,11 +163,24 @@ int catchPackage(){
 	const u_char *pkt_data;
 	struct pcap_pkthdr *header;
 	packCount = 0;
+	//抓包并保存在向量中
+	vector<ComplatePacket*> packets;
 	while ((res = pcap_next_ex(adhandle, &header, &pkt_data)) >= 0){
 		if (res == 0)	continue;			//time out
-		if (packCount++ > capNum) break;	//limit the package numbers;
-		printf("No: %d\n", packCount);
-		pcaptool.PrintPackage(pkt_data);
+		if (packCount++ > conf_capNum) break;	//limit the package numbers;
+		ComplatePacket* pak = getCompletePacket(pkt_data);
+		if (pak != nullptr){
+			packets.push_back(pak);
+			printf("%d / %d \n", packCount, conf_capNum);
+		}
+		else{
+			printf("%d / %d   × \n", packCount, conf_capNum);
+		}
+	}
+	//输出抓包结果
+	for (auto &i : packets){
+		i->printPacket();
+		printf("\n\n");
 	}
 	if (res == -1){
 		printf("Error reading the packets: %s\n", pcap_geterr(adhandle));
@@ -208,7 +222,7 @@ int savePackage(){
 //called by pcap_loop in savePackage
 void save_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_char *pkt_data){
 	packCount++;
-	if (packCount >= capNum){
+	if (packCount >= conf_capNum){
 		exit(0);
 	}
 	printf(".");
@@ -218,7 +232,8 @@ void save_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_ch
 
 //printf he message of header, called by pcap_loop in readPackage
 void read_handler(u_char *dumpfile, const struct pcap_pkthdr *header, const u_char *pkt_data){
-	pcaptool.PrintPackage(pkt_data);
+	//pcaptool.PrintPackage(pkt_data);
+	//TODO
 }
 
 //display static data

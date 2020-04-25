@@ -4,7 +4,6 @@
 #undef inline 
 #endif
 
-
 #include<string.h>
 #include<string>
 #include<iostream>
@@ -14,31 +13,21 @@
 using namespace std;
 
 typedef unsigned char u_char;
-typedef unsigned int u_int;
 typedef unsigned short u_short;
+typedef unsigned int u_int;
 typedef vector<string> strVec;
 
 #define ERR_READ_FAIL "explain binary data to struct fail"
 #define ERR_ARGU	"unexpect argument"
+#define ERR_UNSUPPOSE "unsupported features"
 
-//=============== tool function defination =================
-namespace globalFunc{
-	//字符串包数据处理
-	int GetUcharsArray(string hexStream, vector<u_char> &result);
+//=============== 协议头部 =================
 
-	//打印某数据的二进制表示
-	template <typename Ty> void printBin(Ty*);
-
-	//字节数组转整数
-	int binToInt(u_char*, int);
-}
-
-//=============== some of the header struct ================
 struct Ethernet_pak{
 	u_char destination[6];
 	u_char source[6];
 	u_short etype;
-	u_short crc[4];
+	u_int crc;
 
 	int initialize(const u_char*);
 	//判断上层协议是否IPV4
@@ -62,8 +51,7 @@ struct IP_Pak {
 	u_short crc;
 	u_char source_ip[4];
 	u_char destin_ip[4];
-	u_char *option;			//头部可选部分
-	u_char *data;			//数据部分
+	unique_ptr<u_char> option;	//头部可选部分
 
 	//根据字节数组初始化对象,返回头部长度和总长度
 	tuple<int,int> initialize(const u_char* data);
@@ -75,23 +63,33 @@ struct IP_Pak {
 	static void printPacket(const IP_Pak &);
 	//获取上层协议名称
 	static string getTypeName(const IP_Pak &);
+
+	IP_Pak(const IP_Pak&) = delete;
+	IP_Pak& operator = (const IP_Pak&) = delete;
+	IP_Pak();
+	~IP_Pak();
 };
 
 struct TCP_Pak {
 	u_short source_por;
 	u_short destin_port;
-	u_int  sequenceNum;
-	u_int  acknowledgeMent;
-	u_char len_pad_flag[2];		//4 bits headers length, 6 bits resever, 6 bits control
+	u_char sequenceNum[4];
+	u_char acknowledgeMent[4];
+	u_char  len_pad_flag[2];		//4 bits headers length, 6 bits resever, 6 bits control
 	u_short windows;
 	u_short checkSum;
 	u_short urgent;
-	u_char *option;
+	unique_ptr<u_char> option;
 
 	//根据字节数组构建对象，返回头部长度
 	int initialize(const u_char*);
 	//打印数据报信息
 	static void printPacket(const TCP_Pak &);
+
+	TCP_Pak(const TCP_Pak&) = delete;
+	TCP_Pak& operator = (const TCP_Pak&) = delete;
+	TCP_Pak();
+	~TCP_Pak();
 };
 
 struct UDP_Pak{
@@ -100,8 +98,12 @@ struct UDP_Pak{
 	u_short length;
 	u_short checkSum;
 
-	//打印数据报信息
+	//根据字节数组构造对象，返回报文总长度
+	int initialize(const u_char* data);
 	static void printPacket(const UDP_Pak &);
+
+	UDP_Pak();
+	~UDP_Pak();
 };
 
 struct ARP_Pak{
@@ -119,47 +121,16 @@ struct ARP_Pak{
 	static void printPacket(const ARP_Pak &);
 };
 
-//============== mainly class =========================
 
-class package{
-	Ethernet_pak *ethe;
-	IP_Pak *ip;
-	TCP_Pak *tcp;
-	UDP_Pak *udp;
-	ARP_Pak *arp;
+//============== 完整数据包 ==============
 
-public:
-	void PrintPackage(const u_char *pkt_data);
-
-private:
-	void printfEthe();
-	void printfIP();
-	void printfTCP();
-	void printfUDP();
-	void printfARP();
-	bool isIPV4();
-	bool isUDP();
-	bool isTCP();
-	bool isARP();
-	
-	string getTypeNameI();
-	string getTypeNameII();
-
-public:
-	package();
-	~package();
-};
-
-
-//============== some of the complete packet ==============
-
-
-//基类：表示一个完整的数据包
+//完整数据报的基类
 class ComplatePacket {	
 public:
+	bool isValid;	//数据报是否完整
+	int dataLen;	//数据部分长度
 	virtual void printPacket(){};
 };
-
 
 //一个完整的TCP数据包
 class CP_TCP : public ComplatePacket{
@@ -167,19 +138,44 @@ public:
 	unique_ptr<Ethernet_pak> ether_head;
 	unique_ptr<IP_Pak> ip_head;
 	unique_ptr<TCP_Pak> tcp_head;
-	u_char *data = nullptr;
+	unique_ptr<u_char> payLoad;
 
-	void printPacket(){
-		cout << "place holder \n";
-		return;
-	};
+	void printPacket();
+	CP_TCP(const CP_TCP&) = delete;
+	CP_TCP& operator = (const CP_TCP&) = delete;
+	CP_TCP();
+	~CP_TCP();
+};
 
-	~CP_TCP(){
-		delete[]data;
-	}
+//一个完整的UDP数据报
+class CP_UDP : public ComplatePacket{
+public:
+	unique_ptr<Ethernet_pak> ether_head;
+	unique_ptr<IP_Pak> ip_head;
+	unique_ptr<UDP_Pak> udp_head;
+	unique_ptr<u_char> payLoad;
+
+	void printPacket();
+	CP_UDP(const CP_UDP&) = delete;
+	CP_UDP& operator = (const CP_UDP&) = delete;
+	CP_UDP();
+	~CP_UDP();
 };
 
 
 //生成一个完整的数据包对象
-ComplatePacket* getCompletePacket(u_char *data);
+ComplatePacket* getCompletePacket(const u_char *data);
 
+namespace globalFunc{
+	//字符串包数据处理
+	int GetUcharsArray(string hexStream, vector<u_char> &result);
+
+	//打印某数据的二进制表示
+	template <typename Ty> void printBin(Ty*);
+
+	//字节数组转整数
+	template<typename T> u_int binToInt(const T*, int);
+
+	//释放数组回调函数
+	template<typename T> void deleter(T* ary);
+}
