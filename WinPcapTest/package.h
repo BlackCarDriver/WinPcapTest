@@ -4,10 +4,13 @@
 #undef inline 
 #endif
 
+
 #include<string.h>
 #include<string>
 #include<iostream>
 #include<vector>
+#include <memory>
+#include<tuple>
 using namespace std;
 
 typedef unsigned char u_char;
@@ -15,15 +18,37 @@ typedef unsigned int u_int;
 typedef unsigned short u_short;
 typedef vector<string> strVec;
 
+#define ERR_READ_FAIL "explain binary data to struct fail"
+#define ERR_ARGU	"unexpect argument"
 
 //=============== tool function defination =================
-int GetUcharsArray(string hexStream, vector<u_char> &result);
+namespace globalFunc{
+	//字符串包数据处理
+	int GetUcharsArray(string hexStream, vector<u_char> &result);
 
+	//打印某数据的二进制表示
+	template <typename Ty> void printBin(Ty*);
 
+	//字节数组转整数
+	int binToInt(u_char*, int);
+}
+
+//=============== some of the header struct ================
 struct Ethernet_pak{
 	u_char destination[6];
 	u_char source[6];
 	u_short etype;
+	u_short crc[4];
+
+	int initialize(const u_char*);
+	//判断上层协议是否IPV4
+	static bool isIPV4(const Ethernet_pak&);
+	//判断上层协议是否ARP
+	static bool isARP(const Ethernet_pak&);
+	//打印数据包信息
+	static void printPacket(const Ethernet_pak&);
+	//获取上层协议名称
+	static string getTypeName(const Ethernet_pak &);
 };
 
 struct IP_Pak {
@@ -37,6 +62,19 @@ struct IP_Pak {
 	u_short crc;
 	u_char source_ip[4];
 	u_char destin_ip[4];
+	u_char *option;			//头部可选部分
+	u_char *data;			//数据部分
+
+	//根据字节数组初始化对象,返回头部长度和总长度
+	tuple<int,int> initialize(const u_char* data);
+	//判断上层协议是否TCP
+	static bool isTCP(const IP_Pak &);
+	//判断上层协议是否UDP
+	static bool isUDP(const IP_Pak &);
+	//打印数据报信息
+	static void printPacket(const IP_Pak &);
+	//获取上层协议名称
+	static string getTypeName(const IP_Pak &);
 };
 
 struct TCP_Pak {
@@ -48,6 +86,12 @@ struct TCP_Pak {
 	u_short windows;
 	u_short checkSum;
 	u_short urgent;
+	u_char *option;
+
+	//根据字节数组构建对象，返回头部长度
+	int initialize(const u_char*);
+	//打印数据报信息
+	static void printPacket(const TCP_Pak &);
 };
 
 struct UDP_Pak{
@@ -55,6 +99,9 @@ struct UDP_Pak{
 	u_short destin_port;
 	u_short length;
 	u_short checkSum;
+
+	//打印数据报信息
+	static void printPacket(const UDP_Pak &);
 };
 
 struct ARP_Pak{
@@ -67,7 +114,12 @@ struct ARP_Pak{
 	u_char senderIP[4];
 	u_char targetMAC[6];
 	u_char targetIP[4];
+
+	//打印数据报信息
+	static void printPacket(const ARP_Pak &);
 };
+
+//============== mainly class =========================
 
 class package{
 	Ethernet_pak *ethe;
@@ -93,39 +145,41 @@ private:
 	string getTypeNameI();
 	string getTypeNameII();
 
-	template <typename Ty>
-	friend void printBin(Ty*);
-	friend int binToInt(u_char*, int);
-
 public:
 	package();
 	~package();
 };
 
 
+//============== some of the complete packet ==============
 
-//保存一个完整的TCP数据包
-struct Packet_TCP {
-	Ethernet_pak header_ether;
-	IP_Pak header_ip;
-	u_char* option_ip;	//ip变长部分数据
-	TCP_Pak header_tcp;
-	u_char * option_tcp;	//tcp变长部分数据
-	u_char * data_tcp;	//tcp数据部分
+
+//基类：表示一个完整的数据包
+class ComplatePacket {	
 public:
-	Packet_TCP(string hexStream){
-		vector<u_char> result;
-		if (GetUcharsArray(hexStream, result)!=0){
-			printf("Error happen, can't not getArray from hexStream");
-			return;
-		}
-		//构造以太帧头部
-		if (result.size() < 14){
-			printf("data not enough to fill a ethe Packet!\n");
-			return;
-		}
-		memcpy(&header_ether, result.data(), 20);
-		//构造TCP头部
-		//TODO。。。。。
+	virtual void printPacket(){};
+};
+
+
+//一个完整的TCP数据包
+class CP_TCP : public ComplatePacket{
+public:
+	unique_ptr<Ethernet_pak> ether_head;
+	unique_ptr<IP_Pak> ip_head;
+	unique_ptr<TCP_Pak> tcp_head;
+	u_char *data = nullptr;
+
+	void printPacket(){
+		cout << "place holder \n";
+		return;
+	};
+
+	~CP_TCP(){
+		delete[]data;
 	}
 };
+
+
+//生成一个完整的数据包对象
+ComplatePacket* getCompletePacket(u_char *data);
+

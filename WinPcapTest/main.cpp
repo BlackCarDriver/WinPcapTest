@@ -34,7 +34,18 @@ int captureAndStatic();
 int sendPacket();
 int setFilter(pcap_t * handler, string str);
 
+int test(){
+	string tmp = sharkHand;
+	vector<u_char>hexStream(tmp.begin(), tmp.end());
+	auto result = getCompletePacket(hexStream.data());
+
+	return 0;
+}
+
 int main(int argc, char **argv){
+	return test();
+
+
 	int inum;
 	int i = 0;
 	// get devices list
@@ -245,7 +256,7 @@ int sendPacket()	{
 	vector<u_char> sendData;
 	int sendTimes = 1;	
 	//准备需要发送到数据
-	if (GetUcharsArray(sharkHand, sendData) != 0){
+	if (globalFunc::GetUcharsArray(sharkHand, sendData) != 0){
 		printf("Can't get u_char array, send data fail!\n");
 		return -1;
 	}
@@ -260,8 +271,4 @@ int sendPacket()	{
 	printf("Send data success\n");
 	return 0;
 }
-
-
-//===================== tools functions =====================\
-
 
